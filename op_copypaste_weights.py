@@ -46,8 +46,11 @@ class PasteSkinWeights(bpy.types.Operator):
         if active_vg:
             vertex_indices = get_vertex_group_indices(obj, active_vg)
             current_mode = context.object.mode
-            bpy.ops.object.mode_set(mode='WEIGHT_PAINT')
+            
             if vertex_indices:
+                # Ensure we're in OBJECT mode for weight operations
+                bpy.ops.object.mode_set(mode='OBJECT')
+                
                 if settings.clear_vertex_groups:
                     for i in vertex_indices:
                         clear_vertex_groups(obj, i)
@@ -60,13 +63,15 @@ class PasteSkinWeights(bpy.types.Operator):
                     for i in range(min(paste_count, len(vertex_indices))):
                         normalize_weights(obj, vertex_indices[i])
                 
+                # Return to original mode
+                bpy.ops.object.mode_set(mode=current_mode)
+                
                 if paste_count < len(vertex_indices):
                     self.report({'WARNING'}, f"Pasted weights to {paste_count} of {len(vertex_indices)} vertices in '{active_vg.name}' (source had {len(per_vertex_weights)} vertices)")
                 else:
                     self.report({'INFO'}, f"Pasted weights to vertex group '{active_vg.name}' ({paste_count} vertices)")
             else:
                 self.report({'WARNING'}, f"No vertices found in vertex group '{active_vg.name}'")
-            bpy.ops.object.mode_set(mode=current_mode)
         return {'FINISHED'}
 
 
@@ -249,6 +254,10 @@ def copy_weights_from_vertex_group(obj, vertex_indices):
     if not vertex_indices:
         return
     
+    # Must be in OBJECT mode to read weights accurately
+    current_mode = bpy.context.object.mode
+    bpy.ops.object.mode_set(mode='OBJECT')
+    
     # Get vertex group from the active object
     vertex_groups = obj.vertex_groups
     
@@ -269,6 +278,9 @@ def copy_weights_from_vertex_group(obj, vertex_indices):
             except RuntimeError:
                 # Vertex is not in this group, skip
                 pass
+    
+    # Restore the original mode
+    bpy.ops.object.mode_set(mode=current_mode)
 
 
 def paste_copied_weights(obj, skin_weights_buff, target_indices):
@@ -294,11 +306,9 @@ def paste_per_vertex_weights(obj, per_vertex_weights_buff, target_indices):
     """
     This function pastes per-vertex skin weights from the clipboard to target vertices.
     Matches source vertices to target vertices in order (1st to 1st, 2nd to 2nd, etc.)
+    NOTE: Assumes caller has already switched to OBJECT mode.
     """
     vertex_groups = obj.vertex_groups
-    current_mode = bpy.context.object.mode
-    # Switch to Object mode
-    bpy.ops.object.mode_set(mode='OBJECT')
     
     # Determine how many vertices we can paste based on what we have
     num_source_vertices = len(per_vertex_weights_buff)
@@ -319,9 +329,6 @@ def paste_per_vertex_weights(obj, per_vertex_weights_buff, target_indices):
                 # Create the vertex group if it doesn't exist
                 obj.vertex_groups.new(name=sw.group_name)
                 vertex_groups[sw.group_name].add([target_vtx_index], sw.weight, 'REPLACE')
-    
-    # Switch back to the mode that was before editing
-    bpy.ops.object.mode_set(mode=current_mode)
     
     return paste_count
 
