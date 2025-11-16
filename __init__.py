@@ -7,7 +7,7 @@ bl_info = {
     "version": (0, 3, 2),
     "blender": (2, 80, 0),
     "location": "View 3D > Sidebar > Item Tab > Skin Weights CopyPaster",
-    "description": "Copies and paste weights from selected vertices",
+    "description": "Copies and paste weights from active vertex group to active vertex group",
     "category": "Rigging",
 }
 
