@@ -34,13 +34,13 @@ class PasteSkinWeights(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        weights = context.scene.sw_copypaster.clipboard
+        per_vertex_weights = context.scene.sw_copypaster.per_vertex_clipboard
         obj = context.active_object
-        return obj is not None and obj.type == 'MESH' and obj.vertex_groups.active is not None and weights
+        return obj is not None and obj.type == 'MESH' and obj.vertex_groups.active is not None and per_vertex_weights
 
     def execute(self, context):
         settings = context.scene.sw_copypaster.settings
-        weights = context.scene.sw_copypaster.clipboard
+        per_vertex_weights = context.scene.sw_copypaster.per_vertex_clipboard
         obj = context.active_object
         active_vg = obj.vertex_groups.active
         if active_vg:
@@ -51,11 +51,19 @@ class PasteSkinWeights(bpy.types.Operator):
                 if settings.clear_vertex_groups:
                     for i in vertex_indices:
                         clear_vertex_groups(obj, i)
-                paste_copied_weights(obj, weights, vertex_indices)
+                
+                # Use per-vertex paste to preserve individual vertex weights
+                paste_count = paste_per_vertex_weights(obj, per_vertex_weights, vertex_indices)
+                
                 if settings.normalize_weights:
-                    for i in vertex_indices:
-                        normalize_weights(obj, i)
-                self.report({'INFO'}, f"Pasted weights to vertex group '{active_vg.name}' ({len(vertex_indices)} vertices)")
+                    # Only normalize vertices that received weights
+                    for i in range(min(paste_count, len(vertex_indices))):
+                        normalize_weights(obj, vertex_indices[i])
+                
+                if paste_count < len(vertex_indices):
+                    self.report({'WARNING'}, f"Pasted weights to {paste_count} of {len(vertex_indices)} vertices in '{active_vg.name}' (source had {len(per_vertex_weights)} vertices)")
+                else:
+                    self.report({'INFO'}, f"Pasted weights to vertex group '{active_vg.name}' ({paste_count} vertices)")
             else:
                 self.report({'WARNING'}, f"No vertices found in vertex group '{active_vg.name}'")
             bpy.ops.object.mode_set(mode=current_mode)
@@ -231,48 +239,40 @@ def copy_weights_from_vtx(obj, vtx_index):
 
 def copy_weights_from_vertex_group(obj, vertex_indices):
     """
-    This function copies average skin weight data from all vertices in a vertex group to the clipboard
+    This function copies per-vertex skin weight data from all vertices in a vertex group to the clipboard
     """
-    swc_clipboard = bpy.context.scene.sw_copypaster.clipboard
-    # Clear clipboard before copying
-    swc_clipboard.clear()
+    swc_per_vertex_clipboard = bpy.context.scene.sw_copypaster.per_vertex_clipboard
+    # Clear per-vertex clipboard before copying
+    swc_per_vertex_clipboard.clear()
     
     if not vertex_indices:
         return
     
     # Get vertex group from the active object
     vertex_groups = obj.vertex_groups
-    # Dictionary to store sum of weights for each group
-    weight_sums = {}
-    vertex_count = len(vertex_indices)
     
-    # Sum up weights from all vertices
+    # Store weights for each vertex separately
     for vtx_index in vertex_indices:
+        # Create a new entry for this vertex
+        vertex_entry = swc_per_vertex_clipboard.add()
+        
+        # Store all weights for this vertex
         for group in vertex_groups:
             try:
                 weight = group.weight(vtx_index)
                 if weight > 0:
-                    if group.name not in weight_sums:
-                        weight_sums[group.name] = 0.0
-                    weight_sums[group.name] += weight
+                    item = vertex_entry.vertex_data.add()
+                    item.vertex_index = group.index
+                    item.group_name = group.name
+                    item.weight = weight
             except RuntimeError:
                 # Vertex is not in this group
                 pass
-    
-    # Calculate average weights and add to clipboard
-    for group_name, total_weight in weight_sums.items():
-        avg_weight = total_weight / vertex_count
-        if avg_weight > 0:
-            item = swc_clipboard.add()
-            group = vertex_groups[group_name]
-            item.vertex_index = group.index
-            item.group_name = group_name
-            item.weight = avg_weight
 
 
 def paste_copied_weights(obj, skin_weights_buff, target_indices):
     """
-    This function pastes sking weights from the clipboard to the target vertex
+    This function pastes skin weights from the clipboard to the target vertex
     """
     vertex_groups = obj.vertex_groups
     current_mode = bpy.context.object.mode
@@ -287,6 +287,42 @@ def paste_copied_weights(obj, skin_weights_buff, target_indices):
                 vertex_groups[sw.group_name].add([i], sw.weight, 'REPLACE')
     # Switch back to the mode that was before editing
     bpy.ops.object.mode_set(mode=current_mode)
+
+
+def paste_per_vertex_weights(obj, per_vertex_weights_buff, target_indices):
+    """
+    This function pastes per-vertex skin weights from the clipboard to target vertices.
+    Matches source vertices to target vertices in order (1st to 1st, 2nd to 2nd, etc.)
+    """
+    vertex_groups = obj.vertex_groups
+    current_mode = bpy.context.object.mode
+    # Switch to Object mode
+    bpy.ops.object.mode_set(mode='OBJECT')
+    
+    # Determine how many vertices we can paste based on what we have
+    num_source_vertices = len(per_vertex_weights_buff)
+    num_target_vertices = len(target_indices)
+    
+    # Paste to as many target vertices as we have source data for
+    paste_count = min(num_source_vertices, num_target_vertices)
+    
+    for i in range(paste_count):
+        target_vtx_index = target_indices[i]
+        source_vertex_data = per_vertex_weights_buff[i].vertex_data
+        
+        # Apply all weights from this source vertex to the target vertex
+        for sw in source_vertex_data:
+            try:
+                vertex_groups[sw.group_name].add([target_vtx_index], sw.weight, 'REPLACE')
+            except KeyError:
+                # Create the vertex group if it doesn't exist
+                obj.vertex_groups.new(name=sw.group_name)
+                vertex_groups[sw.group_name].add([target_vtx_index], sw.weight, 'REPLACE')
+    
+    # Switch back to the mode that was before editing
+    bpy.ops.object.mode_set(mode=current_mode)
+    
+    return paste_count
 
 
 def normalize_weights(obj, vtx_index):

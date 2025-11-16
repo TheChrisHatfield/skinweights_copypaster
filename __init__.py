@@ -47,6 +47,11 @@ class SWCVertexGroupData(bpy.types.PropertyGroup):
     weight: bpy.props.FloatProperty(name="Skin Weights")
 
 
+class SWCVertexWeights(bpy.types.PropertyGroup):
+    """Stores all vertex group weights for a single vertex"""
+    vertex_data: bpy.props.CollectionProperty(type=SWCVertexGroupData)
+
+
 class SWCPropreties(bpy.types.PropertyGroup):
     clear_vertex_groups: bpy.props.BoolProperty(
         name="Clear vertex groups",
@@ -60,6 +65,7 @@ class SWCPropreties(bpy.types.PropertyGroup):
 
 class SWCopyPaster(bpy.types.PropertyGroup):
     clipboard: bpy.props.CollectionProperty(type=SWCVertexGroupData)
+    per_vertex_clipboard: bpy.props.CollectionProperty(type=SWCVertexWeights)
     settings: bpy.props.PointerProperty(type=SWCPropreties)
 
 
@@ -70,6 +76,7 @@ classes = [
     SelectVGVertices,
     SetWeightOperator,
     SWCVertexGroupData,
+    SWCVertexWeights,
     SWCPropreties,
     SWCopyPaster,
     SW_PT_CopyPaster,
