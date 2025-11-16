@@ -239,7 +239,8 @@ def copy_weights_from_vtx(obj, vtx_index):
 
 def copy_weights_from_vertex_group(obj, vertex_indices):
     """
-    This function copies per-vertex skin weight data from all vertices in a vertex group to the clipboard
+    This function copies per-vertex skin weight data from all vertices in a vertex group to the clipboard.
+    For each vertex in the source group, this copies ALL of its vertex group weights (all bones).
     """
     swc_per_vertex_clipboard = bpy.context.scene.sw_copypaster.per_vertex_clipboard
     # Clear per-vertex clipboard before copying
@@ -256,7 +257,7 @@ def copy_weights_from_vertex_group(obj, vertex_indices):
         # Create a new entry for this vertex
         vertex_entry = swc_per_vertex_clipboard.add()
         
-        # Store all weights for this vertex
+        # Store all weights for this vertex (all bone/group assignments)
         for group in vertex_groups:
             try:
                 weight = group.weight(vtx_index)
@@ -266,7 +267,7 @@ def copy_weights_from_vertex_group(obj, vertex_indices):
                     item.group_name = group.name
                     item.weight = weight
             except RuntimeError:
-                # Vertex is not in this group
+                # Vertex is not in this group, skip
                 pass
 
 

@@ -44,7 +44,7 @@ class SW_PT_CopyPaster(bpy.types.Panel):
 class SWCVertexGroupData(bpy.types.PropertyGroup):
     vertex_index: bpy.props.IntProperty(name="Vertex Group ID")
     group_name: bpy.props.StringProperty(name="Group Name")
-    weight: bpy.props.FloatProperty(name="Skin Weights")
+    weight: bpy.props.FloatProperty(name="Skin Weights", default=0.0, min=0.0, max=1.0, precision=6)
 
 
 class SWCVertexWeights(bpy.types.PropertyGroup):
